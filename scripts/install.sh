@@ -29,6 +29,7 @@ pacman -Syu --noconfirm --needed \
     nvidia nvidia-utils nvidia-settings \
     linux-headers dkms \
     iwd wireless-regdb wpa_supplicant \
+    linux-firmware networkmanager-openvpn \
     firefox thunar curl wget unzip
 
 # === 2. Build mpvpaper ===
