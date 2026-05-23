@@ -17,7 +17,7 @@ echo "║         LEOS System Installer            ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
 
-# === 1. System packages ===
+# === 1. System packages (official repos) ===
 echo "[1/8] Installing packages..."
 pacman -Syu --noconfirm --needed \
     base-devel git nano sudo networkmanager openssh \
@@ -26,35 +26,46 @@ pacman -Syu --noconfirm --needed \
     pipewire wireplumber xdg-desktop-portal-hyprland polkit-gnome \
     btrfs-progs \
     wayland-protocols meson ninja pkg-config \
-    nvidia nvidia-utils nvidia-settings \
     linux-headers dkms \
     iwd wireless-regdb wpa_supplicant \
     linux-firmware networkmanager-openvpn \
     python python-pip nodejs npm deno rustup \
     firefox thunar curl wget unzip \
-    zed \
     ripgrep fd bat eza fzf zoxide starship lazygit btop dust tldr \
     just direnv tmux podman podman-compose \
     swaync grim slurp wl-clipboard brightnessctl pavucontrol \
     imv ttf-jetbrains-mono-nerd \
-    cliphist wlogout swayosd-git nwg-look fastfetch syncthing bitwarden \
-    ccache mold sccache watchexec xh sqlite redis turbo \
+    cliphist nwg-look fastfetch syncthing bitwarden \
+    ccache mold sccache watchexec xh sqlite redis \
     ufw fail2ban timeshift \
     telegram-desktop \
     spotify-launcher \
     duperemove compsize libwebp \
-    auto-cpufreq ananicy-cpp preload earlyoom profile-sync-daemon \
+    ananicy-cpp earlyoom profile-sync-daemon \
     pacman-contrib
 
-# === 2. Build mpvpaper ===
-echo ""
-echo "[2/8] Building mpvpaper (video wallpaper)..."
-if ! command -v mpvpaper &>/dev/null; then
-    cd /tmp && rm -rf mpvpaper
-    git clone https://github.com/GhostNaN/mpvpaper.git
-    cd mpvpaper && meson build && ninja -C build && ninja -C build install
+# Install nvidia only on real hardware (skip in VM)
+if lspci | grep -qi nvidia; then
+    pacman -S --noconfirm --needed nvidia nvidia-utils nvidia-settings
+fi
+
+# === 1b. Install yay (AUR helper) ===
+if ! command -v yay &>/dev/null; then
+    echo "Installing yay (AUR helper)..."
+    cd /tmp && rm -rf yay
+    git clone https://aur.archlinux.org/yay-bin.git yay
+    cd yay && makepkg -si --noconfirm
     cd /
 fi
+
+# === 1c. AUR packages ===
+echo "Installing AUR packages..."
+sudo -u "$USERNAME" yay -S --noconfirm --needed \
+    wlogout swayosd-git auto-cpufreq preload zed-editor mpvpaper-git
+
+# === 2. Install dev tools ===
+echo ""
+echo "[2/8] Installing dev tools..."
 
 # === 2b. Install uv and pnpm ===
 echo ""
