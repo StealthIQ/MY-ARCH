@@ -50,6 +50,7 @@ echo "[2b/8] Installing uv and pnpm..."
 curl -LsSf https://astral.sh/uv/install.sh | sh
 npm install -g pnpm
 rustup default stable
+cargo install cargo-binstall
 
 # === 3. Create user ===
 echo ""
