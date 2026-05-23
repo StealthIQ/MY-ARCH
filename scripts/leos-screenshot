@@ -1,0 +1,15 @@
+#!/bin/bash
+# LEOS Screenshot - saves as WebP (30% smaller than PNG)
+mkdir -p ~/Pictures/Screenshots
+FILE=~/Pictures/Screenshots/$(date +%Y%m%d_%H%M%S).webp
+
+if [ "$1" = "area" ]; then
+    grim -g "$(slurp)" /tmp/shot.png
+else
+    grim /tmp/shot.png
+fi
+
+cwebp -lossless /tmp/shot.png -o "$FILE" -quiet
+wl-copy < "$FILE"
+rm /tmp/shot.png
+notify-send "Screenshot saved" "$FILE" -t 2000

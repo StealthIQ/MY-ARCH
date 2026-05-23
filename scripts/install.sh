@@ -39,7 +39,7 @@ pacman -Syu --noconfirm --needed \
     imv ttf-jetbrains-mono-nerd \
     ufw fail2ban timeshift \
     telegram-desktop \
-    duperemove compsize
+    duperemove compsize libwebp
 
 # === 2. Build mpvpaper ===
 echo ""
@@ -163,7 +163,8 @@ echo ""
 echo "[7/8] Installing leos-mem monitoring tool..."
 cp "$SCRIPT_DIR/scripts/leos-mem" /usr/local/bin/leos-mem
 cp "$SCRIPT_DIR/scripts/leos-info" /usr/local/bin/leos-info
-chmod +x /usr/local/bin/leos-mem /usr/local/bin/leos-info
+cp "$SCRIPT_DIR/scripts/leos-screenshot" /usr/local/bin/leos-screenshot
+chmod +x /usr/local/bin/leos-mem /usr/local/bin/leos-info /usr/local/bin/leos-screenshot
 
 # === 8. Enable services ===
 echo ""
