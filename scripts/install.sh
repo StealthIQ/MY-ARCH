@@ -30,7 +30,7 @@ pacman -Syu --noconfirm --needed \
     linux-headers dkms \
     iwd wireless-regdb wpa_supplicant \
     linux-firmware networkmanager-openvpn \
-    python python-pip nodejs npm rustup \
+    python python-pip nodejs npm deno rustup \
     firefox thunar curl wget unzip \
     zed \
     ripgrep fd bat eza fzf zoxide starship lazygit btop dust tldr \
