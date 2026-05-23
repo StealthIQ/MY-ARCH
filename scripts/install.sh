@@ -30,6 +30,7 @@ pacman -Syu --noconfirm --needed \
     linux-headers dkms \
     iwd wireless-regdb wpa_supplicant \
     linux-firmware networkmanager-openvpn \
+    python python-pip nodejs npm \
     firefox thunar curl wget unzip
 
 # === 2. Build mpvpaper ===
@@ -41,6 +42,12 @@ if ! command -v mpvpaper &>/dev/null; then
     cd mpvpaper && meson build && ninja -C build && ninja -C build install
     cd /
 fi
+
+# === 2b. Install uv and pnpm ===
+echo ""
+echo "[2b/8] Installing uv and pnpm..."
+curl -LsSf https://astral.sh/uv/install.sh | sh
+npm install -g pnpm
 
 # === 3. Create user ===
 echo ""
