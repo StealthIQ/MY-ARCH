@@ -35,8 +35,9 @@ pacman -Syu --noconfirm --needed \
     zed \
     ripgrep fd bat eza fzf zoxide starship lazygit btop dust tldr \
     just direnv tmux podman podman-compose \
-    mako grim slurp wl-clipboard brightnessctl pavucontrol \
+    swaync grim slurp wl-clipboard brightnessctl pavucontrol \
     imv ttf-jetbrains-mono-nerd \
+    cliphist wlogout swayosd-git nwg-look fastfetch syncthing bitwarden \
     ufw fail2ban timeshift \
     telegram-desktop \
     duperemove compsize libwebp \
@@ -80,6 +81,7 @@ echo '%wheel ALL=(ALL:ALL) ALL' > /etc/sudoers.d/wheel
 UHOME="/home/$USERNAME"
 cat > "$UHOME/.bashrc" << 'EOF'
 # LEOS Shell Config
+fastfetch --logo small
 eval "$(starship init bash)"
 eval "$(zoxide init bash)"
 eval "$(direnv hook bash)"
@@ -181,6 +183,7 @@ systemctl enable ananicy-cpp 2>/dev/null || true
 systemctl enable preload 2>/dev/null || true
 systemctl enable earlyoom 2>/dev/null || true
 systemctl --user -M "$USERNAME@" enable psd 2>/dev/null || true
+systemctl --user -M "$USERNAME@" enable syncthing 2>/dev/null || true
 ufw default deny incoming 2>/dev/null || true
 ufw default allow outgoing 2>/dev/null || true
 ufw allow ssh 2>/dev/null || true
