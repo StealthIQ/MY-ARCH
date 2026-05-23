@@ -51,6 +51,12 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 npm install -g pnpm
 rustup default stable
 cargo install cargo-binstall
+mkdir -p /home/$USERNAME/.cargo
+cat > /home/$USERNAME/.cargo/config.toml << 'EOF'
+[alias]
+install = ["binstall"]
+EOF
+chown -R $USERNAME:$USERNAME /home/$USERNAME/.cargo
 
 # === 3. Create user ===
 echo ""
