@@ -62,6 +62,12 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 npm install -g pnpm
 rustup default stable
 cargo install cargo-binstall
+
+# Kiro CLI (AI coding assistant)
+curl -fsSL https://kiro.dev/install.sh | sh
+
+# Antigravity CLI (Google's agentic coding tool)
+curl -fsSL https://antigravity.codes/install.sh | sh
 mkdir -p /home/$USERNAME/.cargo
 cat > /home/$USERNAME/.cargo/config.toml << 'EOF'
 [alias]
