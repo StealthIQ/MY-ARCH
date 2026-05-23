@@ -34,7 +34,10 @@ pacman -Syu --noconfirm --needed \
     firefox thunar curl wget unzip \
     zed \
     ripgrep fd bat eza fzf zoxide starship lazygit btop dust tldr \
-    just direnv tmux podman podman-compose
+    just direnv tmux podman podman-compose \
+    mako grim slurp wl-clipboard brightnessctl pavucontrol \
+    imv ttf-jetbrains-mono-nerd \
+    ufw fail2ban timeshift
 
 # === 2. Build mpvpaper ===
 echo ""
@@ -153,6 +156,12 @@ echo "[8/8] Enabling services..."
 systemctl enable NetworkManager 2>/dev/null || true
 systemctl enable sshd 2>/dev/null || true
 systemctl enable sddm 2>/dev/null || true
+systemctl enable ufw 2>/dev/null || true
+systemctl enable fail2ban 2>/dev/null || true
+ufw default deny incoming 2>/dev/null || true
+ufw default allow outgoing 2>/dev/null || true
+ufw allow ssh 2>/dev/null || true
+ufw enable 2>/dev/null || true
 
 # === Done ===
 echo ""
