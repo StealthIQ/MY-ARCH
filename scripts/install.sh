@@ -31,7 +31,8 @@ pacman -Syu --noconfirm --needed \
     iwd wireless-regdb wpa_supplicant \
     linux-firmware networkmanager-openvpn \
     python python-pip nodejs npm \
-    firefox thunar curl wget unzip
+    firefox thunar curl wget unzip \
+    zed
 
 # === 2. Build mpvpaper ===
 echo ""
