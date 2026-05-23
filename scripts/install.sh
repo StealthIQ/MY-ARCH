@@ -25,7 +25,11 @@ pacman -Syu --noconfirm --needed \
     sddm ttf-font-awesome noto-fonts \
     pipewire wireplumber xdg-desktop-portal-hyprland polkit-gnome \
     btrfs-progs \
-    wayland-protocols meson ninja pkg-config
+    wayland-protocols meson ninja pkg-config \
+    nvidia nvidia-utils nvidia-settings \
+    linux-headers dkms \
+    iwd wireless-regdb wpa_supplicant \
+    firefox thunar curl wget unzip
 
 # === 2. Build mpvpaper ===
 echo ""
