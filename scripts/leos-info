@@ -1,0 +1,82 @@
+#!/bin/bash
+# LEOS System Info Panel
+# Shows HRAM, CRAM, Storage, CStorage in a nice view
+
+PHYS_RAM=$(awk '/MemTotal/{print $2}' /proc/meminfo)
+PHYS_USED=$(awk '/MemTotal/{t=$2} /MemAvailable/{a=$2} END{print t-a}' /proc/meminfo)
+PHYS_FREE=$(awk '/MemAvailable/{print $2}' /proc/meminfo)
+ZSWAP_STORED=$(cat /sys/kernel/debug/zswap/stored_pages 2>/dev/null || echo 0)
+ZSWAP_POOL=$(cat /sys/kernel/debug/zswap/pool_total_size 2>/dev/null || echo 0)
+STORED_KB=$((ZSWAP_STORED * 4))
+POOL_KB=$((ZSWAP_POOL / 1024))
+
+if [ "$POOL_KB" -gt 0 ] 2>/dev/null; then
+  RATIO=$(awk "BEGIN{printf \"%.1f\", $STORED_KB/$POOL_KB}")
+  R_INT=${RATIO%%.*}
+  [ "$R_INT" -lt 1 ] && R_INT=3
+  CRAM_EFFECTIVE=$((PHYS_RAM * R_INT))
+else
+  RATIO="~3.0"
+  CRAM_EFFECTIVE=$((PHYS_RAM * 3))
+fi
+CRAM_USED=$STORED_KB
+
+# Storage
+DISK_TOTAL=$(df / --output=size -B1 | tail -1)
+DISK_USED=$(df / --output=used -B1 | tail -1)
+DISK_FREE=$(df / --output=avail -B1 | tail -1)
+
+# Btrfs compression ratio (estimate from compsize if available)
+if command -v compsize &>/dev/null; then
+  COMP_INFO=$(compsize / 2>/dev/null | grep "Total" | head -1)
+  DISK_RATIO=$(echo "$COMP_INFO" | awk '{print $NF}')
+else
+  DISK_RATIO="~1.7x"
+fi
+CSTORAGE_EFFECTIVE=$((DISK_TOTAL * 17 / 10))
+
+to_gb() { awk "BEGIN{printf \"%.1f\", $1/1048576}"; }
+to_gb_bytes() { awk "BEGIN{printf \"%.0f\", $1/1073741824}"; }
+pct() { awk "BEGIN{printf \"%.0f\", ($1/$2)*100}"; }
+
+bar() {
+  local pct=$1
+  local width=20
+  local filled=$((pct * width / 100))
+  local empty=$((width - filled))
+  printf "["
+  for ((i=0; i<filled; i++)); do printf "#"; done
+  for ((i=0; i<empty; i++)); do printf "-"; done
+  printf "]"
+}
+
+echo ""
+echo "  ╔══════════════════════════════════════════════╗"
+echo "  ║            LEOS System Info                  ║"
+echo "  ╠══════════════════════════════════════════════╣"
+echo ""
+HRAM_PCT=$(pct $PHYS_USED $PHYS_RAM)
+echo "  HRAM (Hard RAM - Physical)"
+echo "    $(bar $HRAM_PCT) $(to_gb $PHYS_USED)G / $(to_gb $PHYS_RAM)G ($HRAM_PCT%)"
+echo ""
+if [ "$CRAM_EFFECTIVE" -gt 0 ]; then
+  CRAM_PCT=$(pct $CRAM_USED $CRAM_EFFECTIVE)
+  echo "  CRAM (Compressed RAM - Effective)"
+  echo "    $(bar $CRAM_PCT) $(to_gb $CRAM_USED)G / $(to_gb $CRAM_EFFECTIVE)G ($CRAM_PCT%)"
+  echo "    Compression: ${RATIO}:1"
+fi
+echo ""
+DISK_PCT=$(pct $DISK_USED $DISK_TOTAL)
+echo "  STORAGE (Physical Disk)"
+echo "    $(bar $DISK_PCT) $(to_gb_bytes $DISK_USED)G / $(to_gb_bytes $DISK_TOTAL)G ($DISK_PCT%)"
+echo ""
+echo "  CSTORAGE (Compressed - Effective)"
+echo "    Effective capacity: ~$(to_gb_bytes $CSTORAGE_EFFECTIVE)G"
+echo "    Btrfs zstd ratio: $DISK_RATIO"
+echo ""
+echo "  ╠══════════════════════════════════════════════╣"
+echo "  ║  Kernel: $(uname -r)"
+echo "  ║  Uptime: $(uptime -p)"
+echo "  ║  CPU:    $(nproc) cores"
+echo "  ╚══════════════════════════════════════════════╝"
+echo ""

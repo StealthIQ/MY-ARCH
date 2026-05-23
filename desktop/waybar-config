@@ -4,18 +4,32 @@
     "height": 30,
     "modules-left": ["hyprland/workspaces"],
     "modules-center": ["clock"],
-    "modules-right": ["memory", "cpu", "pulseaudio", "tray"],
+    "modules-right": ["custom/cram", "memory", "cpu", "disk", "pulseaudio", "tray"],
     "clock": {
         "format": "{:%H:%M  %a %d %b}",
         "tooltip-format": "{:%Y-%m-%d}"
     },
+    "custom/cram": {
+        "exec": "cat /sys/kernel/debug/zswap/stored_pages 2>/dev/null | awk '{printf \"CRAM %.1fG\", ($1*4)/1048576}'",
+        "interval": 5,
+        "format": "{}",
+        "tooltip": true,
+        "tooltip-format": "Compressed RAM in use"
+    },
     "memory": {
-        "format": "RAM {}%",
+        "format": "RAM {percentage}%",
+        "tooltip-format": "{used:0.1f}G / {total:0.1f}G",
         "interval": 5
     },
     "cpu": {
         "format": "CPU {usage}%",
         "interval": 5
+    },
+    "disk": {
+        "format": "DISK {percentage_used}%",
+        "path": "/",
+        "tooltip-format": "{used} / {total} (btrfs zstd compressed)",
+        "interval": 30
     },
     "pulseaudio": {
         "format": "VOL {volume}%"

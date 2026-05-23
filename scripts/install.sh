@@ -161,7 +161,8 @@ chown -R "$USERNAME:$USERNAME" "$UHOME"
 echo ""
 echo "[7/8] Installing leos-mem monitoring tool..."
 cp "$SCRIPT_DIR/scripts/leos-mem" /usr/local/bin/leos-mem
-chmod +x /usr/local/bin/leos-mem
+cp "$SCRIPT_DIR/scripts/leos-info" /usr/local/bin/leos-info
+chmod +x /usr/local/bin/leos-mem /usr/local/bin/leos-info
 
 # === 8. Enable services ===
 echo ""
