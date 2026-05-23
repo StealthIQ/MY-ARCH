@@ -39,7 +39,9 @@ pacman -Syu --noconfirm --needed \
     imv ttf-jetbrains-mono-nerd \
     ufw fail2ban timeshift \
     telegram-desktop \
-    duperemove compsize libwebp
+    duperemove compsize libwebp \
+    auto-cpufreq ananicy-cpp preload earlyoom profile-sync-daemon \
+    pacman-contrib
 
 # === 2. Build mpvpaper ===
 echo ""
@@ -174,10 +176,59 @@ systemctl enable sshd 2>/dev/null || true
 systemctl enable sddm 2>/dev/null || true
 systemctl enable ufw 2>/dev/null || true
 systemctl enable fail2ban 2>/dev/null || true
+systemctl enable auto-cpufreq 2>/dev/null || true
+systemctl enable ananicy-cpp 2>/dev/null || true
+systemctl enable preload 2>/dev/null || true
+systemctl enable earlyoom 2>/dev/null || true
+systemctl --user -M "$USERNAME@" enable psd 2>/dev/null || true
 ufw default deny incoming 2>/dev/null || true
 ufw default allow outgoing 2>/dev/null || true
 ufw allow ssh 2>/dev/null || true
 ufw enable 2>/dev/null || true
+
+# === Storage efficiency ===
+# Auto-clean package cache weekly (keep last 2 versions)
+cat > /etc/systemd/system/paccache.service << 'EOF'
+[Unit]
+Description=Clean pacman cache
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/paccache -rk2
+EOF
+cat > /etc/systemd/system/paccache.timer << 'EOF'
+[Unit]
+Description=Clean pacman cache weekly
+[Timer]
+OnCalendar=weekly
+Persistent=true
+[Install]
+WantedBy=timers.target
+EOF
+systemctl enable paccache.timer
+
+# Cap journal logs at 100MB
+mkdir -p /etc/systemd/journald.conf.d
+cat > /etc/systemd/journald.conf.d/size.conf << 'EOF'
+[Journal]
+SystemMaxUse=100M
+EOF
+
+# /tmp on tmpfs (lives in RAM, auto-cleared on reboot)
+grep -q "tmpfs /tmp" /etc/fstab || echo "tmpfs /tmp tmpfs defaults,noatime,size=2G 0 0" >> /etc/fstab
+
+# === Security hardening ===
+# DNS over HTTPS via systemd-resolved
+mkdir -p /etc/systemd/resolved.conf.d
+cat > /etc/systemd/resolved.conf.d/dns-over-tls.conf << 'EOF'
+[Resolve]
+DNS=1.1.1.1#cloudflare-dns.com 9.9.9.9#dns.quad9.net
+DNSOverTLS=yes
+EOF
+systemctl enable systemd-resolved 2>/dev/null || true
+
+# earlyoom config (kill at 5% free RAM instead of 0%)
+mkdir -p /etc/default
+echo 'EARLYOOM_ARGS="-m 5 -s 5 --prefer ollama --avoid sshd"' > /etc/default/earlyoom
 
 # === Done ===
 echo ""
