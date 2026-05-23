@@ -41,6 +41,7 @@ pacman -Syu --noconfirm --needed \
     ccache mold sccache watchexec xh sqlite redis turbo \
     ufw fail2ban timeshift \
     telegram-desktop \
+    spotify-launcher \
     duperemove compsize libwebp \
     auto-cpufreq ananicy-cpp preload earlyoom profile-sync-daemon \
     pacman-contrib
