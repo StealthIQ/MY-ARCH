@@ -143,6 +143,18 @@ mkdir -p "$UHOME/.config/hypr" "$UHOME/.config/waybar" "$UHOME/Videos"
 cp "$SCRIPT_DIR/desktop/hyprland.conf" "$UHOME/.config/hypr/hyprland.conf"
 cp "$SCRIPT_DIR/desktop/hyprlock.conf" "$UHOME/.config/hypr/hyprlock.conf"
 cp "$SCRIPT_DIR/desktop/waybar-config" "$UHOME/.config/waybar/config"
+
+# WhatsApp PWA
+mkdir -p "$UHOME/.local/share/applications"
+cat > "$UHOME/.local/share/applications/whatsapp.desktop" << 'EOF'
+[Desktop Entry]
+Name=WhatsApp
+Exec=firefox --new-window https://web.whatsapp.com
+Icon=firefox
+Type=Application
+Categories=Network;Chat;
+EOF
+
 chown -R "$USERNAME:$USERNAME" "$UHOME"
 
 # === 7. Install leos-mem tool ===
