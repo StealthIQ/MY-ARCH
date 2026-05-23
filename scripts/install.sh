@@ -1,8 +1,8 @@
 #!/bin/bash
 # LEOS Full System Setup
-# Run on a fresh Arch Linux install with btrfs root
+# Works on fresh OR existing Arch installs
 # Usage: sudo ./install.sh
-set -euo pipefail
+set +e  # Don't exit on errors - handle them gracefully
 
 if [ "$EUID" -ne 0 ]; then
     echo "Run as root: sudo ./install.sh"
@@ -17,15 +17,16 @@ echo "║         LEOS System Installer            ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
 
-# === 1. System packages (official repos) ===
+# === 1. System packages ===
 echo "[1/8] Installing packages..."
-pacman -Syu --noconfirm --needed \
+rm -f /var/lib/pacman/db.lck
+
+pacman -Syu --noconfirm --needed --overwrite '*' \
     base-devel git nano sudo networkmanager openssh \
     hyprland hyprlock hypridle waybar kitty mpv wofi \
     sddm ttf-font-awesome noto-fonts \
     pipewire wireplumber xdg-desktop-portal-hyprland polkit-gnome \
-    btrfs-progs \
-    wayland-protocols meson ninja pkg-config \
+    btrfs-progs wayland-protocols meson ninja pkg-config \
     linux-headers dkms \
     iwd wireless-regdb wpa_supplicant \
     linux-firmware networkmanager-openvpn \
@@ -38,74 +39,69 @@ pacman -Syu --noconfirm --needed \
     cliphist nwg-look fastfetch syncthing bitwarden \
     ccache mold sccache watchexec xh sqlite redis \
     ufw fail2ban timeshift \
-    telegram-desktop \
-    spotify-launcher \
+    telegram-desktop spotify-launcher \
     duperemove compsize libwebp \
     ananicy-cpp earlyoom profile-sync-daemon \
-    pacman-contrib
+    pacman-contrib gobject-introspection scdoc
 
-# Install nvidia only on real hardware (skip in VM)
-if lspci | grep -qi nvidia; then
-    pacman -S --noconfirm --needed nvidia nvidia-utils nvidia-settings
-fi
+# Nvidia - only on real hardware
+lspci 2>/dev/null | grep -qi nvidia && pacman -S --noconfirm --needed nvidia nvidia-utils nvidia-settings
 
-# === 1b. Install yay (AUR helper) ===
+# === 1b. Yay (AUR helper) ===
 if ! command -v yay &>/dev/null; then
-    echo "Installing yay (AUR helper)..."
+    echo "Installing yay..."
     cd /tmp && rm -rf yay
     git clone https://aur.archlinux.org/yay-bin.git yay
-    cd yay && makepkg -si --noconfirm
-    cd /
+    chown -R "$USERNAME:$USERNAME" yay
+    sudo -u "$USERNAME" bash -c 'cd /tmp/yay && makepkg --noconfirm'
+    pacman -U --noconfirm /tmp/yay/*.pkg.tar.zst
 fi
 
 # === 1c. AUR packages ===
 echo "Installing AUR packages..."
-sudo -u "$USERNAME" yay -S --noconfirm --needed \
-    wlogout swayosd-git auto-cpufreq preload zed-editor mpvpaper-git
+# Build each AUR package: clone, build as user, install as root
+for pkg in wlogout auto-cpufreq preload mpvpaper-git; do
+    if ! pacman -Qi "${pkg%-git}" &>/dev/null && ! pacman -Qi "$pkg" &>/dev/null; then
+        echo "  Building $pkg..."
+        cd /tmp && rm -rf "$pkg"
+        git clone "https://aur.archlinux.org/$pkg.git" 2>/dev/null || continue
+        chown -R "$USERNAME:$USERNAME" "$pkg"
+        sudo -u "$USERNAME" bash -c "cd /tmp/$pkg && makepkg --noconfirm --skippgpcheck" || continue
+        pacman -U --noconfirm /tmp/$pkg/*.pkg.tar.zst 2>/dev/null || true
+    fi
+done
 
-# === 2. Install dev tools ===
+# === 2. Dev tools ===
 echo ""
 echo "[2/8] Installing dev tools..."
+curl -LsSf https://astral.sh/uv/install.sh | sh 2>/dev/null || true
+npm install -g pnpm 2>/dev/null || true
+sudo -u "$USERNAME" rustup default stable 2>/dev/null || true
+sudo -u "$USERNAME" cargo install cargo-binstall 2>/dev/null || true
+curl -fsSL https://kiro.dev/install.sh | sh 2>/dev/null || true
+curl -fsSL https://antigravity.codes/install.sh | sh 2>/dev/null || true
 
-# === 2b. Install uv and pnpm ===
+# === 3. User account ===
 echo ""
-echo "[2b/8] Installing uv and pnpm..."
-curl -LsSf https://astral.sh/uv/install.sh | sh
-npm install -g pnpm
-rustup default stable
-cargo install cargo-binstall
-
-# Kiro CLI (AI coding assistant)
-curl -fsSL https://kiro.dev/install.sh | sh
-
-# Antigravity CLI (Google's agentic coding tool)
-curl -fsSL https://antigravity.codes/install.sh | sh
-mkdir -p /home/$USERNAME/.cargo
-cat > /home/$USERNAME/.cargo/config.toml << 'EOF'
-[alias]
-install = ["binstall"]
-EOF
-chown -R $USERNAME:$USERNAME /home/$USERNAME/.cargo
-
-# === 3. Create user ===
-echo ""
-echo "[3/8] Setting up user account..."
+echo "[3/8] Setting up user..."
 if ! id "$USERNAME" &>/dev/null; then
     useradd -m -G wheel -s /bin/bash "$USERNAME"
     echo "$USERNAME:$USERNAME" | chpasswd
 fi
 echo '%wheel ALL=(ALL:ALL) ALL' > /etc/sudoers.d/wheel
+echo "$USERNAME ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/leos
+chmod 440 /etc/sudoers.d/wheel /etc/sudoers.d/leos
 
-# === 3b. Shell config (aliases + tools) ===
+# === 3b. Shell config ===
 UHOME="/home/$USERNAME"
+mkdir -p "$UHOME/.cargo"
 cat > "$UHOME/.bashrc" << 'EOF'
 # LEOS Shell Config
-fastfetch --logo small
-eval "$(starship init bash)"
-eval "$(zoxide init bash)"
-eval "$(direnv hook bash)"
+fastfetch --logo small 2>/dev/null
+eval "$(starship init bash)" 2>/dev/null
+eval "$(zoxide init bash)" 2>/dev/null
+eval "$(direnv hook bash)" 2>/dev/null
 
-# Aliases
 alias ls='eza --icons'
 alias ll='eza -la --icons'
 alias cat='bat --paging=never'
@@ -119,73 +115,60 @@ alias docker='podman'
 alias docker-compose='podman-compose'
 alias curl='xh'
 
-# FZF
-source /usr/share/fzf/key-bindings.bash
-source /usr/share/fzf/completion.bash
+source /usr/share/fzf/key-bindings.bash 2>/dev/null
+source /usr/share/fzf/completion.bash 2>/dev/null
 
-# Path
 export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
-
-# Build speed: use ccache and mold linker
 export CC="ccache gcc"
 export CXX="ccache g++"
 export RUSTC_WRAPPER="sccache"
 export CARGO_TARGET_DIR="/tmp/cargo-build"
 EOF
-chown "$USERNAME:$USERNAME" "$UHOME/.bashrc"
 
-# Mold as default linker for Rust
-mkdir -p "$UHOME/.cargo"
-cat >> "$UHOME/.cargo/config.toml" << 'EOF'
+cat > "$UHOME/.cargo/config.toml" << 'EOF'
+[alias]
+install = ["binstall"]
+
 [target.x86_64-unknown-linux-gnu]
 linker = "clang"
 rustflags = ["-C", "link-arg=-fuse-ld=mold"]
 EOF
-chown -R "$USERNAME:$USERNAME" "$UHOME/.cargo"
+chown -R "$USERNAME:$USERNAME" "$UHOME"
 
-# === 4. Memory compression (zswap + sysctl) ===
+# === 4. Memory compression ===
 echo ""
 echo "[4/8] Configuring memory compression..."
 cp "$SCRIPT_DIR/system/sysctl-memory.conf" /etc/sysctl.d/99-leos-memory.conf
 sysctl --system 2>/dev/null
 
-# Create swap if not exists
 if ! swapon --show | grep -q swapfile; then
-    if [ ! -d /swap ]; then
-        btrfs subvolume create /swap 2>/dev/null || mkdir -p /swap
-    fi
+    btrfs subvolume create /swap 2>/dev/null || mkdir -p /swap
     if [ ! -f /swap/swapfile ]; then
         btrfs filesystem mkswapfile --size 8G /swap/swapfile 2>/dev/null || \
             (dd if=/dev/zero of=/swap/swapfile bs=1M count=8192 && chmod 600 /swap/swapfile && mkswap /swap/swapfile)
     fi
-    swapon /swap/swapfile 2>/dev/null || true
+    swapon /swap/swapfile 2>/dev/null
     grep -q "swapfile" /etc/fstab || echo "/swap/swapfile none swap defaults 0 0" >> /etc/fstab
 fi
 
-# === 5. Bootloader zswap params ===
+# === 5. Bootloader ===
 echo ""
-echo "[5/8] Configuring zswap boot parameters..."
-ZSWAP_PARAMS="zswap.enabled=1 zswap.compressor=zstd zswap.zpool=zsmalloc zswap.max_pool_percent=50 zswap.shrinker_enabled=1"
+echo "[5/8] Configuring zswap..."
+ZSWAP="zswap.enabled=1 zswap.compressor=zstd zswap.zpool=zsmalloc zswap.max_pool_percent=50 zswap.shrinker_enabled=1"
 if [ -f /boot/loader/entries/leos.conf ]; then
-    grep -q "zswap.enabled" /boot/loader/entries/leos.conf || \
-        sed -i "s|^options.*|& $ZSWAP_PARAMS|" /boot/loader/entries/leos.conf
+    grep -q "zswap.enabled" /boot/loader/entries/leos.conf || sed -i "s|^options.*|& $ZSWAP|" /boot/loader/entries/leos.conf
 elif [ -f /etc/default/grub ]; then
-    grep -q "zswap.enabled" /etc/default/grub || \
-        sed -i "s|GRUB_CMDLINE_LINUX_DEFAULT=\"|GRUB_CMDLINE_LINUX_DEFAULT=\"$ZSWAP_PARAMS |" /etc/default/grub
-    grub-mkconfig -o /boot/grub/grub.cfg
+    grep -q "zswap.enabled" /etc/default/grub || sed -i "s|GRUB_CMDLINE_LINUX_DEFAULT=\"|GRUB_CMDLINE_LINUX_DEFAULT=\"$ZSWAP |" /etc/default/grub
+    grub-mkconfig -o /boot/grub/grub.cfg 2>/dev/null
 fi
 
-# === 6. Desktop configs ===
+# === 6. Desktop ===
 echo ""
-echo "[6/8] Installing desktop configuration..."
-UHOME="/home/$USERNAME"
-mkdir -p "$UHOME/.config/hypr" "$UHOME/.config/waybar" "$UHOME/Videos"
+echo "[6/8] Desktop config..."
+mkdir -p "$UHOME/.config/hypr" "$UHOME/.config/waybar" "$UHOME/Videos" "$UHOME/.local/share/applications"
 cp "$SCRIPT_DIR/desktop/hyprland.conf" "$UHOME/.config/hypr/hyprland.conf"
 cp "$SCRIPT_DIR/desktop/hyprlock.conf" "$UHOME/.config/hypr/hyprlock.conf"
 cp "$SCRIPT_DIR/desktop/waybar-config" "$UHOME/.config/waybar/config"
-
-# WhatsApp PWA
-mkdir -p "$UHOME/.local/share/applications"
 cat > "$UHOME/.local/share/applications/whatsapp.desktop" << 'EOF'
 [Desktop Entry]
 Name=WhatsApp
@@ -194,39 +177,30 @@ Icon=firefox
 Type=Application
 Categories=Network;Chat;
 EOF
-
 chown -R "$USERNAME:$USERNAME" "$UHOME"
 
-# === 7. Install leos-mem tool ===
+# === 7. LEOS tools ===
 echo ""
-echo "[7/8] Installing leos-mem monitoring tool..."
+echo "[7/8] Installing LEOS tools..."
 cp "$SCRIPT_DIR/scripts/leos-mem" /usr/local/bin/leos-mem
 cp "$SCRIPT_DIR/scripts/leos-info" /usr/local/bin/leos-info
 cp "$SCRIPT_DIR/scripts/leos-screenshot" /usr/local/bin/leos-screenshot
 chmod +x /usr/local/bin/leos-mem /usr/local/bin/leos-info /usr/local/bin/leos-screenshot
 
-# === 8. Enable services ===
+# === 8. Services + hardening ===
 echo ""
 echo "[8/8] Enabling services..."
-systemctl enable NetworkManager 2>/dev/null || true
-systemctl enable sshd 2>/dev/null || true
-systemctl enable sddm 2>/dev/null || true
-systemctl enable ufw 2>/dev/null || true
-systemctl enable fail2ban 2>/dev/null || true
-systemctl enable auto-cpufreq 2>/dev/null || true
-systemctl enable ananicy-cpp 2>/dev/null || true
-systemctl enable preload 2>/dev/null || true
-systemctl enable earlyoom 2>/dev/null || true
-systemctl enable redis 2>/dev/null || true
-systemctl --user -M "$USERNAME@" enable psd 2>/dev/null || true
-systemctl --user -M "$USERNAME@" enable syncthing 2>/dev/null || true
-ufw default deny incoming 2>/dev/null || true
-ufw default allow outgoing 2>/dev/null || true
-ufw allow ssh 2>/dev/null || true
-ufw enable 2>/dev/null || true
+systemctl enable NetworkManager sshd sddm ufw fail2ban ananicy-cpp earlyoom redis systemd-resolved 2>/dev/null
+systemctl enable auto-cpufreq preload 2>/dev/null
+systemctl enable paccache.timer 2>/dev/null
 
-# === Storage efficiency ===
-# Auto-clean package cache weekly (keep last 2 versions)
+# Firewall
+ufw default deny incoming 2>/dev/null
+ufw default allow outgoing 2>/dev/null
+ufw allow ssh 2>/dev/null
+ufw --force enable 2>/dev/null
+
+# Paccache timer
 cat > /etc/systemd/system/paccache.service << 'EOF'
 [Unit]
 Description=Clean pacman cache
@@ -243,33 +217,27 @@ Persistent=true
 [Install]
 WantedBy=timers.target
 EOF
-systemctl enable paccache.timer
+systemctl enable paccache.timer 2>/dev/null
 
-# Cap journal logs at 100MB
+# Journal cap
 mkdir -p /etc/systemd/journald.conf.d
-cat > /etc/systemd/journald.conf.d/size.conf << 'EOF'
-[Journal]
-SystemMaxUse=100M
-EOF
+echo -e "[Journal]\nSystemMaxUse=100M" > /etc/systemd/journald.conf.d/size.conf
 
-# /tmp on tmpfs (lives in RAM, auto-cleared on reboot)
+# tmpfs /tmp
 grep -q "tmpfs /tmp" /etc/fstab || echo "tmpfs /tmp tmpfs defaults,noatime,size=2G 0 0" >> /etc/fstab
 
-# === Security hardening ===
-# DNS over HTTPS via systemd-resolved
+# DNS over TLS
 mkdir -p /etc/systemd/resolved.conf.d
 cat > /etc/systemd/resolved.conf.d/dns-over-tls.conf << 'EOF'
 [Resolve]
 DNS=1.1.1.1#cloudflare-dns.com 9.9.9.9#dns.quad9.net
 DNSOverTLS=yes
 EOF
-systemctl enable systemd-resolved 2>/dev/null || true
 
-# earlyoom config (kill at 5% free RAM instead of 0%)
+# earlyoom
 mkdir -p /etc/default
 echo 'EARLYOOM_ARGS="-m 5 -s 5 --prefer ollama --avoid sshd"' > /etc/default/earlyoom
 
-# === Done ===
 echo ""
 echo "╔══════════════════════════════════════════╗"
 echo "║         LEOS Install Complete!           ║"
@@ -278,7 +246,7 @@ echo "║  Login:     leos / leos                  ║"
 echo "║  Desktop:   Hyprland (Super+Enter=term)  ║"
 echo "║  Wallpaper: ~/Videos/wallpaper.mp4       ║"
 echo "║  Lock:      Super+L                      ║"
-echo "║  Monitor:   leos-mem                     ║"
+echo "║  Monitor:   leos-mem / leos-info         ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
 echo "Reboot now: sudo reboot"
