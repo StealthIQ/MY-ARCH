@@ -34,7 +34,7 @@ pacman -Syu --noconfirm --needed \
     firefox thunar curl wget unzip \
     zed \
     ripgrep fd bat eza fzf zoxide starship lazygit btop dust tldr \
-    just direnv tmux
+    just direnv tmux podman podman-compose
 
 # === 2. Build mpvpaper ===
 echo ""
@@ -87,6 +87,8 @@ alias cd='z'
 alias top='btop'
 alias du='dust'
 alias lg='lazygit'
+alias docker='podman'
+alias docker-compose='podman-compose'
 
 # FZF
 source /usr/share/fzf/key-bindings.bash
