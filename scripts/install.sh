@@ -30,7 +30,7 @@ pacman -Syu --noconfirm --needed \
     linux-headers dkms \
     iwd wireless-regdb wpa_supplicant \
     linux-firmware networkmanager-openvpn \
-    python python-pip nodejs npm \
+    python python-pip nodejs npm rustup \
     firefox thunar curl wget unzip \
     zed
 
@@ -49,6 +49,7 @@ echo ""
 echo "[2b/8] Installing uv and pnpm..."
 curl -LsSf https://astral.sh/uv/install.sh | sh
 npm install -g pnpm
+rustup default stable
 
 # === 3. Create user ===
 echo ""
