@@ -37,7 +37,8 @@ pacman -Syu --noconfirm --needed \
     just direnv tmux podman podman-compose \
     mako grim slurp wl-clipboard brightnessctl pavucontrol \
     imv ttf-jetbrains-mono-nerd \
-    ufw fail2ban timeshift
+    ufw fail2ban timeshift \
+    telegram-desktop
 
 # === 2. Build mpvpaper ===
 echo ""
