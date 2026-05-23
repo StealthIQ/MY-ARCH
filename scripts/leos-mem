@@ -1,0 +1,47 @@
+#!/bin/bash
+PHYS_RAM=$(awk '/MemTotal/{print $2}' /proc/meminfo)
+PHYS_USED=$(awk '/MemTotal/{t=$2} /MemAvailable/{a=$2} END{print t-a}' /proc/meminfo)
+PHYS_FREE=$(awk '/MemAvailable/{print $2}' /proc/meminfo)
+ZSWAP_STORED=$(cat /sys/kernel/debug/zswap/stored_pages 2>/dev/null || echo 0)
+ZSWAP_POOL=$(cat /sys/kernel/debug/zswap/pool_total_size 2>/dev/null || echo 0)
+STORED_KB=$((ZSWAP_STORED * 4))
+POOL_KB=$((ZSWAP_POOL / 1024))
+if [ "$POOL_KB" -gt 0 ] 2>/dev/null; then
+  RATIO=$(awk "BEGIN{printf \"%.1f\", $STORED_KB/$POOL_KB}")
+  R_INT=${RATIO%%.*}
+  [ "$R_INT" -lt 1 ] && R_INT=3
+  CRAM_EFFECTIVE=$((PHYS_RAM * R_INT))
+else
+  RATIO="~3.0"
+  CRAM_EFFECTIVE=$((PHYS_RAM * 3))
+fi
+
+CRAM_USED=$STORED_KB
+CRAM_FREE=$((CRAM_EFFECTIVE - STORED_KB))
+[ "$CRAM_FREE" -lt 0 ] && CRAM_FREE=0
+
+TOTAL_EFFECTIVE=$((PHYS_RAM + CRAM_EFFECTIVE))
+TOTAL_USED=$((PHYS_USED + STORED_KB))
+
+to_gb() { awk "BEGIN{printf \"%.1f\", $1/1048576}"; }
+pct() { awk "BEGIN{printf \"%.0f\", ($1/$2)*100}"; }
+
+echo ""
+echo "  LEOS Memory Status"
+echo "  =================="
+echo ""
+echo "  Hard RAM (physical):"
+echo "    Total:    $(to_gb $PHYS_RAM) GB"
+echo "    Used:     $(to_gb $PHYS_USED) GB  ($(pct $PHYS_USED $PHYS_RAM)%)"
+echo "    Free:     $(to_gb $PHYS_FREE) GB"
+echo ""
+echo "  CRAM (compressed, effective):"
+echo "    Capacity: $(to_gb $CRAM_EFFECTIVE) GB"
+echo "    Used:     $(to_gb $CRAM_USED) GB  ($(pct $CRAM_USED $CRAM_EFFECTIVE)%)"
+echo "    Free:     $(to_gb $CRAM_FREE) GB"
+echo "    Ratio:    ${RATIO}:1"
+echo ""
+echo "  Combined:"
+echo "    Total:    $(to_gb $TOTAL_EFFECTIVE) GB effective"
+echo "    Used:     $(to_gb $TOTAL_USED) GB"
+echo ""

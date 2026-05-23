@@ -1,0 +1,156 @@
+# Maintainer: LEOS
+# Based on Arch Linux official kernel PKGBUILD
+
+pkgbase=linux-LEOS
+pkgver=6.19.1
+pkgrel=1
+pkgdesc='Linux kernel optimized for memory and storage compression (AI workloads)'
+url='https://github.com/torvalds/linux'
+arch=(x86_64)
+license=(GPL-2.0-only)
+makedepends=(bc cpio gettext libelf pahole perl python tar xz)
+options=('!strip')
+
+_srcname=linux-${pkgver}
+source=(
+  "https://cdn.kernel.org/pub/linux/kernel/v6.x/${_srcname}.tar.xz"
+  "config"
+)
+sha256sums=('SKIP' 'SKIP')
+
+prepare() {
+  cd $_srcname
+
+  # Apply custom patches
+  local src
+  for src in "${source[@]}"; do
+    src="${src%%::*}"
+    src="${src##*/}"
+    [[ $src = *.patch ]] || continue
+    echo "Applying patch $src..."
+    patch -Np1 < "../$src"
+  done
+
+  # Copy our custom config
+  cp ../config .config
+
+  # Ensure all compression options are enabled
+  scripts/config --enable CONFIG_ZSWAP
+  scripts/config --enable CONFIG_ZSWAP_SHRINKER_DEFAULT_ON
+  scripts/config --set-str CONFIG_ZSWAP_COMPRESSOR_DEFAULT zstd
+  scripts/config --set-str CONFIG_ZSWAP_ZPOOL_DEFAULT zsmalloc
+  scripts/config --set-val CONFIG_ZSWAP_MAX_POOL_PERCENT 50
+
+  scripts/config --enable CONFIG_ZRAM
+  scripts/config --enable CONFIG_ZRAM_MULTI_COMP
+  scripts/config --enable CONFIG_ZRAM_WRITEBACK
+  scripts/config --enable CONFIG_ZRAM_TRACK_ENTRY_ACTIME
+
+  scripts/config --enable CONFIG_CRYPTO_ZSTD
+  scripts/config --enable CONFIG_CRYPTO_LZ4
+  scripts/config --enable CONFIG_CRYPTO_LZ4HC
+
+  scripts/config --enable CONFIG_ZSMALLOC
+
+  scripts/config --enable CONFIG_BTRFS_FS
+  scripts/config --enable CONFIG_BTRFS_FS_POSIX_ACL
+
+  # Finalize config
+  make olddefconfig
+  make prepare
+
+  # Set localversion
+  echo "-LEOS" > localversion
+}
+
+build() {
+  cd $_srcname
+  make all
+}
+
+_package() {
+  pkgdesc="The $pkgdesc kernel and modules"
+  depends=(coreutils kmod initramfs)
+  optdepends=('wireless-regdb: to set the correct wireless channels'
+              'linux-firmware: firmware images needed for some devices')
+
+  cd $_srcname
+  local modulesdir="$pkgdir/usr/lib/modules/$(<version)"
+
+  echo "Installing boot image..."
+  install -Dm644 "$(make -s image_name)" "$modulesdir/vmlinuz"
+
+  echo "Installing modules..."
+  ZSTD_CLEVEL=19 make INSTALL_MOD_PATH="$pkgdir/usr" INSTALL_MOD_STRIP=1 modules_install
+
+  rm "$modulesdir"/{source,build}
+
+  echo "Installing pkgbase file..."
+  echo "$pkgbase" | install -Dm644 /dev/stdin "$modulesdir/pkgbase"
+}
+
+_package-headers() {
+  pkgdesc="Headers and scripts for building modules for the $pkgdesc kernel"
+  depends=(pahole)
+
+  cd $_srcname
+  local builddir="$pkgdir/usr/lib/modules/$(<version)/build"
+
+  echo "Installing build files..."
+  install -Dt "$builddir" -m644 .config Makefile Module.symvers System.map localversion vmlinux
+  install -Dt "$builddir/kernel" -m644 kernel/Makefile
+  install -Dt "$builddir/arch/x86" -m644 arch/x86/Makefile
+  cp -t "$builddir" -a scripts
+
+  echo "Installing headers..."
+  cp -t "$builddir" -a include
+  cp -t "$builddir/arch/x86" -a arch/x86/include
+  install -Dt "$builddir/arch/x86/kernel" -m644 arch/x86/kernel/asm-offsets.s
+  install -Dt "$builddir/drivers/md" -m644 drivers/md/*.h
+  install -Dt "$builddir/net/mac80211" -m644 net/mac80211/*.h
+  install -Dt "$builddir/drivers/media/i2c" -m644 drivers/media/i2c/msp3400-driver.h
+
+  echo "Installing KConfig files..."
+  find . -name 'Kconfig*' -exec install -Dm644 {} "$builddir/{}" \;
+
+  echo "Removing unneeded architectures..."
+  local arch
+  for arch in "$builddir"/arch/*/; do
+    [[ $arch = */x86/ ]] && continue
+    echo "Removing $(basename "$arch")"
+    rm -r "$arch"
+  done
+
+  echo "Removing documentation..."
+  rm -r "$builddir/Documentation"
+
+  echo "Removing broken symlinks..."
+  find -L "$builddir" -type l -printf 'Removing %P\n' -delete
+
+  echo "Removing loose objects..."
+  find "$builddir" -type f -name '*.o' -printf 'Removing %P\n' -delete
+
+  echo "Stripping build tools..."
+  local file
+  while read -rd '' file; do
+    case "$(file -Sib "$file")" in
+      application/x-sharedlib\;*) strip -v $STRIP_SHARED "$file" ;;
+      application/x-archive\;*) strip -v $STRIP_STATIC "$file" ;;
+      application/x-executable\;*) strip -v $STRIP_BINARIES "$file" ;;
+    esac
+  done < <(find "$builddir" -type f -perm -u+x ! -name vmlinux -print0)
+
+  echo "Stripping vmlinux..."
+  strip -v $STRIP_STATIC "$builddir/vmlinux"
+}
+
+pkgname=(
+  "$pkgbase"
+  "$pkgbase-headers"
+)
+for _p in "${pkgname[@]}"; do
+  eval "package_$_p() {
+    $(declare -f "_package${_p#$pkgbase}")
+    _package${_p#$pkgbase}
+  }"
+done

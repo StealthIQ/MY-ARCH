@@ -1,0 +1,26 @@
+{
+    "layer": "top",
+    "position": "top",
+    "height": 30,
+    "modules-left": ["hyprland/workspaces"],
+    "modules-center": ["clock"],
+    "modules-right": ["memory", "cpu", "pulseaudio", "tray"],
+    "clock": {
+        "format": "{:%H:%M  %a %d %b}",
+        "tooltip-format": "{:%Y-%m-%d}"
+    },
+    "memory": {
+        "format": "RAM {}%",
+        "interval": 5
+    },
+    "cpu": {
+        "format": "CPU {usage}%",
+        "interval": 5
+    },
+    "pulseaudio": {
+        "format": "VOL {volume}%"
+    },
+    "hyprland/workspaces": {
+        "format": "{id}"
+    }
+}
