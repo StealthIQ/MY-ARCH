@@ -32,7 +32,9 @@ pacman -Syu --noconfirm --needed \
     linux-firmware networkmanager-openvpn \
     python python-pip nodejs npm rustup \
     firefox thunar curl wget unzip \
-    zed
+    zed \
+    ripgrep fd bat eza fzf zoxide starship lazygit btop dust tldr \
+    just direnv tmux
 
 # === 2. Build mpvpaper ===
 echo ""
@@ -66,6 +68,34 @@ if ! id "$USERNAME" &>/dev/null; then
     echo "$USERNAME:$USERNAME" | chpasswd
 fi
 echo '%wheel ALL=(ALL:ALL) ALL' > /etc/sudoers.d/wheel
+
+# === 3b. Shell config (aliases + tools) ===
+UHOME="/home/$USERNAME"
+cat > "$UHOME/.bashrc" << 'EOF'
+# LEOS Shell Config
+eval "$(starship init bash)"
+eval "$(zoxide init bash)"
+eval "$(direnv hook bash)"
+
+# Aliases
+alias ls='eza --icons'
+alias ll='eza -la --icons'
+alias cat='bat --paging=never'
+alias find='fd'
+alias grep='rg'
+alias cd='z'
+alias top='btop'
+alias du='dust'
+alias lg='lazygit'
+
+# FZF
+source /usr/share/fzf/key-bindings.bash
+source /usr/share/fzf/completion.bash
+
+# Path
+export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
+EOF
+chown "$USERNAME:$USERNAME" "$UHOME/.bashrc"
 
 # === 4. Memory compression (zswap + sysctl) ===
 echo ""
