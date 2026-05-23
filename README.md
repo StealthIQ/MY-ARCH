@@ -6,7 +6,7 @@ A custom Arch Linux distribution optimized for running AI workloads on memory-co
 
 | Resource | Physical | Effective Target | Method |
 |----------|----------|-----------------|--------|
-| RAM | 32 GB | 45+ GB | zswap (zstd) + kernel VM tuning |
+| RAM | 32 GB | 90+ GB | zswap (zstd) + kernel VM tuning |
 | Storage | 400 GB | 700 GB | Btrfs transparent compression (zstd) |
 
 ## Architecture
