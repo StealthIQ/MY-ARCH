@@ -38,6 +38,7 @@ pacman -Syu --noconfirm --needed \
     swaync grim slurp wl-clipboard brightnessctl pavucontrol \
     imv ttf-jetbrains-mono-nerd \
     cliphist wlogout swayosd-git nwg-look fastfetch syncthing bitwarden \
+    ccache mold sccache watchexec xh sqlite redis turbo \
     ufw fail2ban timeshift \
     telegram-desktop \
     duperemove compsize libwebp \
@@ -98,6 +99,7 @@ alias du='dust'
 alias lg='lazygit'
 alias docker='podman'
 alias docker-compose='podman-compose'
+alias curl='xh'
 
 # FZF
 source /usr/share/fzf/key-bindings.bash
@@ -105,8 +107,23 @@ source /usr/share/fzf/completion.bash
 
 # Path
 export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
+
+# Build speed: use ccache and mold linker
+export CC="ccache gcc"
+export CXX="ccache g++"
+export RUSTC_WRAPPER="sccache"
+export CARGO_TARGET_DIR="/tmp/cargo-build"
 EOF
 chown "$USERNAME:$USERNAME" "$UHOME/.bashrc"
+
+# Mold as default linker for Rust
+mkdir -p "$UHOME/.cargo"
+cat >> "$UHOME/.cargo/config.toml" << 'EOF'
+[target.x86_64-unknown-linux-gnu]
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+EOF
+chown -R "$USERNAME:$USERNAME" "$UHOME/.cargo"
 
 # === 4. Memory compression (zswap + sysctl) ===
 echo ""
@@ -182,6 +199,7 @@ systemctl enable auto-cpufreq 2>/dev/null || true
 systemctl enable ananicy-cpp 2>/dev/null || true
 systemctl enable preload 2>/dev/null || true
 systemctl enable earlyoom 2>/dev/null || true
+systemctl enable redis 2>/dev/null || true
 systemctl --user -M "$USERNAME@" enable psd 2>/dev/null || true
 systemctl --user -M "$USERNAME@" enable syncthing 2>/dev/null || true
 ufw default deny incoming 2>/dev/null || true
