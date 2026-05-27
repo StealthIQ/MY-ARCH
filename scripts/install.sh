@@ -112,8 +112,9 @@ chmod 440 /etc/sudoers.d/wheel /etc/sudoers.d/leos
 echo ""
 echo "[4/10] Deploying system configs..."
 
+cp /etc/mkinitcpio.conf /etc/mkinitcpio.conf.bak
 cp "$SCRIPT_DIR/system/mkinitcpio.conf" /etc/mkinitcpio.conf
-mkinitcpio -P
+mkinitcpio -P || { echo "mkinitcpio failed! Restoring backup..."; cp /etc/mkinitcpio.conf.bak /etc/mkinitcpio.conf; mkinitcpio -P; }
 
 cp "$SCRIPT_DIR/system/sysctl-memory.conf" /etc/sysctl.d/99-leos-memory.conf
 [ "$IN_CHROOT" = false ] && sysctl --system 2>/dev/null
