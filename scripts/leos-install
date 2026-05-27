@@ -94,12 +94,21 @@ case "$INSTALL_MODE" in
     mkfs.fat -F32 "$EFI_PART"
     ;;
 2)
-    # Find largest free region
-    LARGEST_FREE=$(parted -s "$DISK" unit MiB print free 2>/dev/null | \
-        awk '/Free Space/{gsub(/MiB/,""); print $3, $1, $2}' | sort -rn | head -1)
+    # Find largest free region using parted's machine-readable output
+    LARGEST_FREE=""
+    LARGEST_SIZE=0
+    while IFS=: read -r num start end size fs name flags; do
+        [[ "$fs" == "free" ]] || continue
+        size_num=${size//MiB/}
+        size_int=${size_num%%.*}
+        if [ "$size_int" -gt "$LARGEST_SIZE" ] 2>/dev/null; then
+            LARGEST_SIZE=$size_int
+            LARGEST_FREE="$size_int ${start} ${end}"
+        fi
+    done < <(parted -s -m "$DISK" unit MiB print free 2>/dev/null | tail -n +3)
     [ -n "$LARGEST_FREE" ] || die "No free space found on $DISK. Shrink a partition from Windows first."
 
-    FREE_SIZE_MB=$(echo "$LARGEST_FREE" | awk '{printf "%d", $1}')
+    FREE_SIZE_MB=$(echo "$LARGEST_FREE" | awk '{print $1}')
     FREE_START=$(echo "$LARGEST_FREE" | awk '{print $2}')
     FREE_END=$(echo "$LARGEST_FREE" | awk '{print $3}')
     [ "$FREE_SIZE_MB" -gt 10240 ] || die "Need at least 10GB free (found ${FREE_SIZE_MB}MiB)"
