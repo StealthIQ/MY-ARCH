@@ -1,6 +1,6 @@
 # LEOS — AI-Optimized Arch Linux with Aggressive Memory & Storage Compression
 
-A custom Arch Linux distribution optimized for running AI workloads on memory-constrained hardware through aggressive, multi-tier compression.
+A custom Arch Linux distribution for **bare-metal** deployment, optimized for running AI workloads on memory-constrained hardware through aggressive, multi-tier compression.
 
 ## Goals
 
@@ -8,6 +8,41 @@ A custom Arch Linux distribution optimized for running AI workloads on memory-co
 |----------|----------|-----------------|--------|
 | RAM | 32 GB | 90+ GB | zswap (zstd) + kernel VM tuning |
 | Storage | 400 GB | 700 GB | Btrfs transparent compression (zstd) |
+
+## Quick Start (Bare Metal)
+
+```bash
+# 1. Boot Arch Linux live USB on target machine
+# 2. Connect to internet (iwctl / nmtui)
+# 3. Clone this repo
+pacman -Sy git
+git clone https://github.com/iceyxsm/MY-ARCH.git /root/LEOS
+
+# 4. Run the interactive installer
+chmod +x /root/LEOS/scripts/leos-install
+/root/LEOS/scripts/leos-install
+```
+
+The installer handles: disk partitioning, btrfs subvolumes, pacstrap, bootloader, kernel params, and full system config.
+
+### Post-install: Build custom kernel
+
+```bash
+cd ~/LEOS/kernel
+makepkg -s
+sudo pacman -U linux-leos-*.pkg.tar.zst
+sudo mkinitcpio -P
+sudo reboot
+```
+
+### Verify
+
+```bash
+cat /sys/module/zswap/parameters/enabled     # y
+cat /sys/module/zswap/parameters/compressor   # zstd
+leos-info                                     # system overview
+leos-mem                                      # memory compression stats
+```
 
 ## Architecture
 
@@ -21,7 +56,7 @@ A custom Arch Linux distribution optimized for running AI workloads on memory-co
 │  │ raw RAM pinned │  │ → cold pages tier to SSD        │ │
 │  └────────────────┘  └─────────────────────────────────┘ │
 ├──────────────────────────────────────────────────────────┤
-│                Custom Kernel (linux-LEOS)           │
+│                Custom Kernel (linux-leos)                 │
 │                                                          │
 │  Memory Subsystem (mm/)                                  │
 │  ┌─────────────────────────────────────────────────────┐ │
@@ -77,11 +112,13 @@ Based on kernel MM maintainer recommendations (Chris Down/Meta, Johannes Weiner)
 ```
 LEOS/
 ├── kernel/
-│   ├── PKGBUILD              # Arch kernel build recipe
-│   ├── config                # Custom kernel .config
+│   ├── PKGBUILD              # Arch kernel build (full Arch config + overrides)
+│   ├── config                # LEOS kernel config overrides
 │   └── patches/              # Custom kernel patches
 ├── system/
-│   ├── zswap.conf            # Kernel boot params for zswap
+│   ├── mkinitcpio.conf       # initramfs config (bare-metal hardware)
+│   ├── leos.conf             # systemd-boot entry with zswap params
+│   ├── zswap.conf            # Kernel boot params reference
 │   ├── sysctl-memory.conf    # VM tuning parameters
 │   ├── swap-setup.sh         # Create and enable swap partition
 │   └── ai-cgroup.conf        # cgroup config for AI workloads
@@ -89,21 +126,25 @@ LEOS/
 │   ├── btrfs-mount.conf      # fstab mount options
 │   ├── compression-policies.sh  # Per-directory compression setup
 │   └── subvolume-layout.sh   # Btrfs subvolume creation
+├── desktop/
+│   ├── hyprland.conf         # Hyprland config (Cyberpunk Rose Pine)
+│   ├── hyprlock.conf         # Lock screen (static wallpaper)
+│   ├── hyprlock-video.conf   # Lock screen (video wallpaper)
+│   ├── hypridle.conf         # Auto-lock/dim config
+│   ├── environment.conf      # Wayland env vars
+│   ├── kitty.conf            # Terminal (Rose Pine theme)
+│   ├── waybar/               # Status bar config + CSS
+│   ├── mako/                 # Notification daemon
+│   ├── scripts/              # live-wallpaper, lock-video, telegram bot
+│   └── hypr-bot/             # System error monitor (Telegram)
 ├── scripts/
-│   ├── install.sh            # Full system setup
+│   ├── leos-install          # Interactive bare-metal installer
+│   ├── install.sh            # Post-install system setup + rice
 │   ├── build-kernel.sh       # Kernel compilation helper
+│   ├── build-iso.sh          # Build bootable ISO
 │   └── benchmark.sh          # Measure compression ratios
 └── README.md
 ```
-
-## Quick Start
-
-1. Install Arch Linux in QEMU/VMware with btrfs root
-2. Clone this repo
-3. Build custom kernel: `cd kernel && makepkg -s`
-4. Install: `sudo pacman -U linux-LEOS-*.pkg.tar.zst`
-5. Apply configs: `sudo ./scripts/install.sh`
-6. Reboot and verify: `cat /sys/module/zswap/parameters/enabled`
 
 ## Hardware Requirements
 
@@ -111,6 +152,15 @@ LEOS/
 - RAM: 16-64 GB (designed for 32 GB sweet spot)
 - Storage: NVMe SSD (for swap tier performance)
 - GPU: Optional, for AI model offloading
+
+## VM Development (Optional)
+
+For testing changes without touching hardware:
+
+```bash
+# Launch QEMU VM
+./scripts/launch-vm.sh
+```
 
 ## References
 

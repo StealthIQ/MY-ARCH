@@ -1,0 +1,30 @@
+# Mako Notification Daemon - Cyberpunk Rose Pine
+
+max-visible=5
+sort=-time
+anchor=top-right
+layer=overlay
+
+background-color=#191724ee
+text-color=#e0def4ff
+border-color=#c4a7e7ff
+border-size=2
+border-radius=10
+margin=20
+padding=15
+width=350
+height=200
+font=JetBrainsMono Nerd Font 11
+max-icon-size=48
+
+default-timeout=5000
+on-button-left=dismiss
+on-button-right=dismiss-all
+
+[urgency=low]
+border-color=#9ccfd8ff
+default-timeout=3000
+
+[urgency=critical]
+border-color=#eb6f92ff
+default-timeout=0

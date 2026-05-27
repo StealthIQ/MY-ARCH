@@ -1,6 +1,8 @@
 # LEOS Kernel Config Overrides
-# Apply on top of Arch default config
-# Full config generated via: make olddefconfig after applying these
+# Applied ON TOP of full Arch Linux kernel config
+# This ensures all hardware drivers are present while adding LEOS optimizations
+#
+# Usage: PKGBUILD downloads Arch stock config, then applies these overrides
 
 # === Memory Compression (zswap) ===
 CONFIG_SWAP=y
@@ -50,5 +52,5 @@ CONFIG_NO_HZ_FULL=y
 CONFIG_TRANSPARENT_HUGEPAGE=y
 CONFIG_TRANSPARENT_HUGEPAGE_ALWAYS=y
 
-# === Disable unnecessary for desktop AI workstation ===
-# CONFIG_DEBUG_INFO_BTF is not set (saves build time)
+# === Disable unnecessary (saves build time) ===
+# CONFIG_DEBUG_INFO_BTF is not set

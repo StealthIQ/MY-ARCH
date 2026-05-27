@@ -129,6 +129,22 @@ cp -r "$SCRIPT_DIR/filesystem" "$PROFILE/airootfs/root/LEOS/"
 cp -r "$SCRIPT_DIR/kernel" "$PROFILE/airootfs/root/LEOS/"
 cp "$SCRIPT_DIR/README.md" "$PROFILE/airootfs/root/LEOS/"
 
+# Install leos-install command
+mkdir -p "$PROFILE/airootfs/usr/local/bin"
+cp "$SCRIPT_DIR/scripts/leos-install" "$PROFILE/airootfs/usr/local/bin/leos-install"
+chmod +x "$PROFILE/airootfs/usr/local/bin/leos-install"
+
+# MOTD so user knows what to do on boot
+mkdir -p "$PROFILE/airootfs/etc/profile.d"
+cat > "$PROFILE/airootfs/etc/profile.d/leos-welcome.sh" << 'EOF'
+echo ""
+echo "  ╔══════════════════════════════════════════╗"
+echo "  ║  Welcome to LEOS Live                    ║"
+echo "  ║  Run 'leos-install' to install to disk   ║"
+echo "  ╚══════════════════════════════════════════╝"
+echo ""
+EOF
+
 # Customize ISO metadata
 sed -i 's/iso_name=.*/iso_name="leos"/' "$PROFILE/profiledef.sh"
 sed -i 's/iso_label=.*/iso_label="LEOS"/' "$PROFILE/profiledef.sh"

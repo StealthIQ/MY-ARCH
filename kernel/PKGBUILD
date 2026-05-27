@@ -1,7 +1,8 @@
 # Maintainer: LEOS
 # Based on Arch Linux official kernel PKGBUILD
+# Uses FULL Arch kernel config + LEOS compression/memory overrides
 
-pkgbase=linux-LEOS
+pkgbase=linux-leos
 pkgver=6.19.1
 pkgrel=1
 pkgdesc='Linux kernel optimized for memory and storage compression (AI workloads)'
@@ -12,11 +13,13 @@ makedepends=(bc cpio gettext libelf pahole perl python tar xz)
 options=('!strip')
 
 _srcname=linux-${pkgver}
+_archpkgver=${pkgver}-arch1-1
 source=(
   "https://cdn.kernel.org/pub/linux/kernel/v6.x/${_srcname}.tar.xz"
+  "config.arch::https://gitlab.archlinux.org/archlinux/packaging/packages/linux/-/raw/main/config"
   "config"
 )
-sha256sums=('SKIP' 'SKIP')
+sha256sums=('SKIP' 'SKIP' 'SKIP')
 
 prepare() {
   cd $_srcname
@@ -31,36 +34,60 @@ prepare() {
     patch -Np1 < "../$src"
   done
 
-  # Copy our custom config
-  cp ../config .config
+  # Start from full Arch config (all hardware drivers included)
+  # If we downloaded it successfully, use it; otherwise use running kernel's config
+  if [ -f ../config.arch ] && [ -s ../config.arch ]; then
+    echo "Using Arch Linux stock kernel config as base..."
+    cp ../config.arch .config
+  elif [ -f /proc/config.gz ]; then
+    echo "Falling back to running kernel config..."
+    zcat /proc/config.gz > .config
+  else
+    echo "ERROR: No base config available. Place Arch config in kernel/config.arch"
+    exit 1
+  fi
 
-  # Ensure all compression options are enabled
+  # Apply LEOS overrides from config
+  if [ -f ../config ]; then
+    echo "Applying LEOS config overrides..."
+    while IFS= read -r line; do
+      [[ "$line" =~ ^#.*is\ not\ set$ ]] && {
+        opt="${line#\# }"
+        opt="${opt% is not set}"
+        scripts/config --disable "$opt"
+        continue
+      }
+      [[ "$line" =~ ^CONFIG_ ]] || continue
+      key="${line%%=*}"
+      val="${line#*=}"
+      case "$val" in
+        y) scripts/config --enable "$key" ;;
+        m) scripts/config --module "$key" ;;
+        n) scripts/config --disable "$key" ;;
+        \"*\") scripts/config --set-str "$key" "${val//\"/}" ;;
+        *) scripts/config --set-val "$key" "$val" ;;
+      esac
+    done < ../config
+  fi
+
+  # Ensure critical LEOS options (belt and suspenders)
   scripts/config --enable CONFIG_ZSWAP
+  scripts/config --enable CONFIG_ZSWAP_DEFAULT_ON
   scripts/config --enable CONFIG_ZSWAP_SHRINKER_DEFAULT_ON
   scripts/config --set-str CONFIG_ZSWAP_COMPRESSOR_DEFAULT zstd
   scripts/config --set-str CONFIG_ZSWAP_ZPOOL_DEFAULT zsmalloc
   scripts/config --set-val CONFIG_ZSWAP_MAX_POOL_PERCENT 50
-
-  scripts/config --enable CONFIG_ZRAM
-  scripts/config --enable CONFIG_ZRAM_MULTI_COMP
-  scripts/config --enable CONFIG_ZRAM_WRITEBACK
-  scripts/config --enable CONFIG_ZRAM_TRACK_ENTRY_ACTIME
-
   scripts/config --enable CONFIG_CRYPTO_ZSTD
-  scripts/config --enable CONFIG_CRYPTO_LZ4
-  scripts/config --enable CONFIG_CRYPTO_LZ4HC
-
   scripts/config --enable CONFIG_ZSMALLOC
-
   scripts/config --enable CONFIG_BTRFS_FS
   scripts/config --enable CONFIG_BTRFS_FS_POSIX_ACL
 
-  # Finalize config
+  # Finalize — resolve any new symbols with defaults
   make olddefconfig
   make prepare
 
   # Set localversion
-  echo "-LEOS" > localversion
+  echo "-leos" > localversion
 }
 
 build() {
