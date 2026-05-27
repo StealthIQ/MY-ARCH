@@ -95,13 +95,14 @@ case "$INSTALL_MODE" in
     ;;
 2)
     # Find largest free region using parted's machine-readable output
+    # Format: num:start:end:size:fs:name:flags; (free space has "free" in fs field)
     LARGEST_FREE=""
     LARGEST_SIZE=0
-    while IFS=: read -r num start end size fs name flags; do
-        [[ "$fs" == "free" ]] || continue
+    while IFS=':' read -r num start end size fs rest; do
+        [[ "$fs" == "free;" ]] || [[ "$fs" == "free" ]] || continue
         size_num=${size//MiB/}
         size_int=${size_num%%.*}
-        if [ "$size_int" -gt "$LARGEST_SIZE" ] 2>/dev/null; then
+        if [ "${size_int:-0}" -gt "$LARGEST_SIZE" ] 2>/dev/null; then
             LARGEST_SIZE=$size_int
             LARGEST_FREE="$size_int ${start} ${end}"
         fi
@@ -273,7 +274,7 @@ cat > /boot/loader/entries/leos.conf << ENTRY
 title   LEOS
 linux   /vmlinuz-linux
 initrd  /initramfs-linux.img
-options root=UUID=\$ROOT_UUID rootflags=subvol=@ rw zswap.enabled=1 zswap.compressor=zstd zswap.zpool=zsmalloc zswap.max_pool_percent=50 zswap.shrinker_enabled=1
+options root=UUID=\$ROOT_UUID rootflags=subvol=@ rw zswap.enabled=1 zswap.compressor=zstd zswap.zpool=zsmalloc zswap.max_pool_percent=50
 ENTRY
 
 # Run full LEOS system setup (non-fatal — system is bootable even if this fails)
