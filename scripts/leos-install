@@ -13,6 +13,50 @@ warn() { echo -e "${YELLOW}:: $1${NC}"; }
 ok() { echo -e "${GREEN}:: $1${NC}"; }
 settle() { partprobe "$DISK" 2>/dev/null; sleep 1; udevadm settle 2>/dev/null || true; }
 
+# Find an existing EFI partition on $DISK using multiple strategies
+# 1. GPT EFI System Partition type GUID
+# 2. Any FAT32/vfat partition on the disk
+# 3. Any partition containing typical EFI files (bootmgfw.efi, grubx64.efi, etc.)
+find_efi() {
+    local disk="$1"
+    local found=""
+
+    # Strategy 1: GPT type GUID
+    found=$(blkid -t PART_ENTRY_TYPE="c12a7328-f81f-11d2-ba4b-00a0c93ec93b" -o device 2>/dev/null | grep "^${disk}" | head -1) || true
+    [ -n "$found" ] && { echo "$found"; return 0; }
+
+    # Strategy 2: any FAT32/vfat partition on this disk
+    local cands
+    mapfile -t cands < <(lsblk -lnpo NAME,FSTYPE "$disk" | awk '$2 ~ /vfat|fat32|fat/ {print $1}')
+    if [ ${#cands[@]} -eq 1 ]; then
+        echo "${cands[0]}"
+        return 0
+    fi
+
+    # Strategy 3: probe each FAT partition for EFI contents
+    if [ ${#cands[@]} -gt 1 ]; then
+        local tmp
+        tmp=$(mktemp -d)
+        for c in "${cands[@]}"; do
+            if mount -o ro "$c" "$tmp" 2>/dev/null; then
+                if [ -d "$tmp/EFI" ] || [ -f "$tmp/EFI/Microsoft/Boot/bootmgfw.efi" ]; then
+                    umount "$tmp" 2>/dev/null || true
+                    rmdir "$tmp" 2>/dev/null || true
+                    echo "$c"
+                    return 0
+                fi
+                umount "$tmp" 2>/dev/null || true
+            fi
+        done
+        rmdir "$tmp" 2>/dev/null || true
+        # Multiple FAT partitions but none have /EFI — return first as best guess
+        echo "${cands[0]}"
+        return 0
+    fi
+
+    return 1
+}
+
 clear
 echo -e "${BOLD}"
 echo "╔══════════════════════════════════════════╗"
@@ -116,7 +160,7 @@ case "$INSTALL_MODE" in
 
     info "Using free space: $FREE_START → $FREE_END (${FREE_SIZE_MB} MiB)"
 
-    EFI_EXISTING=$(blkid -t PART_ENTRY_TYPE="c12a7328-f81f-11d2-ba4b-00a0c93ec93b" -o device 2>/dev/null | grep "$DISK" | head -1) || true
+    EFI_EXISTING=$(find_efi "$DISK") || true
 
     if [ -n "$EFI_EXISTING" ]; then
         ok "Found existing EFI partition: $EFI_EXISTING"
@@ -140,7 +184,7 @@ case "$INSTALL_MODE" in
     ;;
 3)
     [ ${#PARTS[@]} -gt 0 ] || die "No partitions to replace"
-    EFI_EXISTING=$(blkid -t PART_ENTRY_TYPE="c12a7328-f81f-11d2-ba4b-00a0c93ec93b" -o device 2>/dev/null | grep "$DISK" | head -1) || true
+    EFI_EXISTING=$(find_efi "$DISK") || true
 
     REPLACEABLE=()
     for p in "${PARTS[@]}"; do
@@ -162,8 +206,30 @@ case "$INSTALL_MODE" in
     read -rp "Type 'yes' to confirm: " CONFIRM
     [ "$CONFIRM" = "yes" ] || die "Aborted"
 
-    [ -n "$EFI_EXISTING" ] || die "No EFI partition found"
+    if [ -z "$EFI_EXISTING" ]; then
+        echo ""
+        warn "No EFI partition auto-detected on $DISK"
+        echo "Available FAT/vfat partitions:"
+        lsblk -lnpo NAME,SIZE,FSTYPE,LABEL "$DISK" | awk '$3 ~ /vfat|fat/'
+        echo ""
+        read -rp "Enter EFI partition path manually (e.g. ${DISK}p1) or empty to abort: " EFI_MANUAL
+        [ -n "$EFI_MANUAL" ] && [ -b "$EFI_MANUAL" ] || die "No EFI partition. Cannot install bootloader."
+        EFI_EXISTING="$EFI_MANUAL"
+    fi
     EFI_PART="$EFI_EXISTING"
+
+    # Verify ESP flag is set; if not, offer to set it (required by systemd-boot)
+    EFI_PARTNUM=$(cat "/sys/class/block/$(basename "$EFI_PART")/partition" 2>/dev/null || echo "")
+    if [ -n "$EFI_PARTNUM" ]; then
+        if ! parted -s "$DISK" print 2>/dev/null | awk -v n="$EFI_PARTNUM" '$1==n {print $0}' | grep -qi "esp\|boot"; then
+            warn "ESP/boot flag not set on $EFI_PART"
+            read -rp "Set ESP flag now? (required for boot) [Y/n]: " SET_ESP
+            if [[ ! "$SET_ESP" =~ ^[Nn] ]]; then
+                parted -s "$DISK" set "$EFI_PARTNUM" esp on || warn "Failed to set ESP flag"
+                settle
+            fi
+        fi
+    fi
     ;;
 *)
     die "Invalid choice"
