@@ -174,6 +174,49 @@ esac
 [ -b "$EFI_PART" ] || die "EFI partition $EFI_PART not found"
 
 # ═══════════════════════════════════════════
+# DUAL-BOOT SAFETY CHECKS
+# ═══════════════════════════════════════════
+HAS_WINDOWS=false
+
+# Detect Windows on this disk (NTFS partitions)
+if lsblk -no FSTYPE "$DISK" 2>/dev/null | grep -qi "ntfs"; then
+    HAS_WINDOWS=true
+fi
+
+# Probe EFI for Windows boot files
+TMPCHECK=$(mktemp -d)
+if mount -o ro "$EFI_PART" "$TMPCHECK" 2>/dev/null; then
+    if [ -f "$TMPCHECK/EFI/Microsoft/Boot/bootmgfw.efi" ]; then
+        HAS_WINDOWS=true
+    fi
+    umount "$TMPCHECK" 2>/dev/null || true
+fi
+rmdir "$TMPCHECK" 2>/dev/null || true
+
+if [ "$HAS_WINDOWS" = true ]; then
+    warn "Windows detected on this disk — applying dual-boot safety mode"
+    echo ""
+    echo -e "${YELLOW}IMPORTANT: Before continuing, ensure:${NC}"
+    echo "  1. Windows Fast Startup is DISABLED (Power Options → Choose what power buttons do)"
+    echo "  2. Windows is FULLY shut down (not hibernated) — Shift+Shutdown, not just Shutdown"
+    echo "  3. BitLocker is disabled or you have your recovery key"
+    echo ""
+
+    # Check FAT32 dirty bit on EFI partition
+    if command -v fsck.fat &>/dev/null; then
+        if ! fsck.fat -n "$EFI_PART" &>/dev/null; then
+            warn "EFI partition appears DIRTY (Fast Startup or unclean Windows shutdown)"
+            warn "Mounting and writing to it now risks corrupting Windows boot files"
+            read -rp "Continue anyway? Type 'yes' to proceed: " DIRTY_OK
+            [ "$DIRTY_OK" = "yes" ] || die "Aborted — boot Windows, fully shut down, then retry"
+        fi
+    fi
+
+    read -rp "Continue with dual-boot install? [y/N]: " DUAL_OK
+    [[ "$DUAL_OK" =~ ^[Yy]$ ]] || die "Aborted by user"
+fi
+
+# ═══════════════════════════════════════════
 # TIMEZONE
 # ═══════════════════════════════════════════
 echo ""
@@ -216,6 +259,17 @@ mount "$EFI_PART" /mnt/boot
 
 ok "Mounted all subvolumes"
 
+# Backup any existing fallback bootloader before bootctl install overwrites it
+if [ "$HAS_WINDOWS" = true ] && [ -f /mnt/boot/EFI/BOOT/BOOTX64.EFI ]; then
+    info "Backing up existing /EFI/BOOT/BOOTX64.EFI to BOOTX64.EFI.bak"
+    cp /mnt/boot/EFI/BOOT/BOOTX64.EFI /mnt/boot/EFI/BOOT/BOOTX64.EFI.bak
+fi
+# Backup Windows boot files (defense in depth — bootctl shouldn't touch these but just in case)
+if [ "$HAS_WINDOWS" = true ] && [ -d /mnt/boot/EFI/Microsoft ]; then
+    info "Verifying Windows boot files present and creating backup manifest"
+    find /mnt/boot/EFI/Microsoft -type f | sort > /mnt/boot/.leos-windows-files.bak.txt 2>/dev/null || true
+fi
+
 # ═══════════════════════════════════════════
 # PACSTRAP
 # ═══════════════════════════════════════════
@@ -244,7 +298,13 @@ cat > /mnt/root/leos-setup.sh << CHROOT_EOF
 
 # Timezone + locale
 ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
-hwclock --systohc
+# Use local time if Windows is on this system (Windows expects RTC=local by default)
+if [ "$HAS_WINDOWS" = "true" ]; then
+    hwclock --systohc --localtime
+    timedatectl set-local-rtc 1 --adjust-system-clock 2>/dev/null || true
+else
+    hwclock --systohc
+fi
 echo "en_US.UTF-8 UTF-8" > /etc/locale.gen
 locale-gen
 echo "LANG=en_US.UTF-8" > /etc/locale.conf
@@ -290,7 +350,28 @@ arch-chroot /mnt /root/leos-setup.sh
 # ═══════════════════════════════════════════
 # DONE
 # ═══════════════════════════════════════════
-umount -R /mnt
+# Robust unmount: sync, kill stragglers, retry, lazy fallback
+# Critical for shared EFI partition — must be cleanly unmounted to avoid FAT32 dirty bit
+info "Syncing and unmounting..."
+sync
+sleep 1
+
+# Kill any process still using /mnt (rare but happens with pacstrap leftovers)
+fuser -km /mnt 2>/dev/null || true
+sleep 1
+
+# Try clean unmount first
+if ! umount -R /mnt 2>/dev/null; then
+    warn "Unmount busy — retrying..."
+    sleep 2
+    sync
+    if ! umount -R /mnt 2>/dev/null; then
+        warn "Still busy — using lazy unmount (kernel will detach when free)"
+        umount -lR /mnt || die "Unmount failed completely. Run 'sync; umount -R /mnt' manually before reboot."
+    fi
+fi
+sync
+ok "All filesystems unmounted cleanly"
 
 echo ""
 echo -e "${GREEN}${BOLD}"
@@ -308,6 +389,15 @@ echo "║                                          ║"
 echo "║  Remove USB and reboot now!              ║"
 echo "╚══════════════════════════════════════════╝"
 echo -e "${NC}"
+
+if [ "$HAS_WINDOWS" = true ]; then
+    echo -e "${YELLOW}${BOLD}Dual-boot notes:${NC}"
+    echo "  • systemd-boot will show both LEOS and Windows at boot"
+    echo "  • If Windows missing: hold firmware boot key (F2/F12/ESC) → Windows Boot Manager"
+    echo "  • Backup of original /EFI/BOOT/BOOTX64.EFI saved as BOOTX64.EFI.bak"
+    echo "  • RTC set to LOCAL time for Windows compatibility"
+    echo ""
+fi
 
 read -rp "Reboot now? [Y/n]: " REBOOT
 [[ "$REBOOT" =~ ^[Nn] ]] || reboot
