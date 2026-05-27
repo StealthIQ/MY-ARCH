@@ -2,7 +2,7 @@
 # LEOS Interactive Bare-Metal Installer
 # Boot Arch live USB → connect to internet → run this script
 # Handles: partitioning, btrfs subvolumes, pacstrap, bootloader, full system config
-set -uo pipefail
+set -euo pipefail
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; CYAN='\033[0;36m'; YELLOW='\033[1;33m'; BOLD='\033[1m'; NC='\033[0m'
 LEOS_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -57,7 +57,7 @@ info "Partition layout of $DISK:"
 lsblk -po NAME,SIZE,FSTYPE,LABEL,MOUNTPOINT "$DISK"
 echo ""
 
-mapfile -t PARTS < <(lsblk -npo NAME "$DISK" | grep -v "^${DISK}$")
+mapfile -t PARTS < <(lsblk -lnpo NAME "$DISK" | grep -v "^${DISK}$")
 
 echo -e "${BOLD}Install options:${NC}"
 echo -e "  ${GREEN}1)${NC} Use ENTIRE disk (wipes everything)"
@@ -196,11 +196,11 @@ mkfs.btrfs -f -L LEOS "$ROOT_PART" || die "Failed to create btrfs filesystem"
 
 info "Creating subvolumes..."
 mount "$ROOT_PART" /mnt || die "Failed to mount $ROOT_PART"
-btrfs subvolume create /mnt/@
-btrfs subvolume create /mnt/@home
-btrfs subvolume create /mnt/@swap
-btrfs subvolume create /mnt/@models
-btrfs subvolume create /mnt/@snapshots
+btrfs subvolume create /mnt/@ || die "Failed to create @ subvolume"
+btrfs subvolume create /mnt/@home || die "Failed to create @home subvolume"
+btrfs subvolume create /mnt/@swap || die "Failed to create @swap subvolume"
+btrfs subvolume create /mnt/@models || die "Failed to create @models subvolume"
+btrfs subvolume create /mnt/@snapshots || die "Failed to create @snapshots subvolume"
 umount /mnt
 
 # Mount with compression
@@ -226,7 +226,7 @@ pacstrap -K /mnt base linux linux-firmware btrfs-progs networkmanager sudo nano 
 # FSTAB
 # ═══════════════════════════════════════════
 info "Generating fstab..."
-genfstab -U /mnt >> /mnt/etc/fstab
+genfstab -U /mnt > /mnt/etc/fstab
 
 # ═══════════════════════════════════════════
 # COPY LEOS INTO NEW SYSTEM

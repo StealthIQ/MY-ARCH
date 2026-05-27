@@ -12,6 +12,12 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 USERNAME="leos"
 
+# Detect if running inside chroot (install time vs post-reboot)
+IN_CHROOT=false
+if [ "$(stat -c %d:%i /)" != "$(stat -c %d:%i /proc/1/root/.)" ] 2>/dev/null; then
+    IN_CHROOT=true
+fi
+
 echo "╔══════════════════════════════════════════╗"
 echo "║     LEOS System Setup + Cyberpunk Rice   ║"
 echo "╚══════════════════════════════════════════╝"
@@ -59,6 +65,10 @@ echo "[2/10] Detecting GPU..."
 
 HAS_NVIDIA=false; HAS_AMD=false; HAS_INTEL=false; IS_VM=false
 
+if [ "$IN_CHROOT" = true ]; then
+    echo "  Skipping GPU detection in chroot (will detect on first boot)"
+else
+
 if lspci -nn | grep -i 'vga\|3d\|display' | grep -qi vmware; then
     IS_VM=true
     echo "  VMware detected — software rendering"
@@ -85,6 +95,8 @@ if lspci -nn | grep -i 'vga\|3d\|display' | grep -qiE 'amd|advanced'; then
     pacman -S --noconfirm --needed vulkan-radeon
 fi
 
+fi # end chroot skip
+
 # === 3. User account ===
 echo ""
 echo "[3/10] Setting up user..."
@@ -104,10 +116,10 @@ cp "$SCRIPT_DIR/system/mkinitcpio.conf" /etc/mkinitcpio.conf
 mkinitcpio -P
 
 cp "$SCRIPT_DIR/system/sysctl-memory.conf" /etc/sysctl.d/99-leos-memory.conf
-sysctl --system 2>/dev/null
+[ "$IN_CHROOT" = false ] && sysctl --system 2>/dev/null
 
-# Bootloader entry
-if [ -d /boot/loader/entries ]; then
+# Bootloader entry — only deploy linux-leos entry if that kernel is installed
+if [ -d /boot/loader/entries ] && [ -f /boot/vmlinuz-linux-leos ]; then
     ROOT_UUID=$(findmnt -no UUID /)
     sed "s/ROOT_UUID/$ROOT_UUID/" "$SCRIPT_DIR/system/leos.conf" > /boot/loader/entries/leos.conf
 fi
@@ -115,7 +127,9 @@ fi
 # === 5. Swap ===
 echo ""
 echo "[5/10] Configuring swap..."
-if ! swapon --show | grep -q swap; then
+if [ "$IN_CHROOT" = true ]; then
+    echo "  Skipping swap setup in chroot (will configure on first boot)"
+elif ! swapon --show | grep -q swap; then
     if findmnt -no FSTYPE / | grep -q btrfs; then
         [ -f /swap/swapfile ] || {
             mkdir -p /swap
@@ -283,10 +297,12 @@ systemctl enable ufw fail2ban bluetooth 2>/dev/null
 systemctl enable systemd-resolved 2>/dev/null
 
 # Firewall
-ufw default deny incoming 2>/dev/null
-ufw default allow outgoing 2>/dev/null
-ufw allow ssh 2>/dev/null
-ufw --force enable 2>/dev/null
+if [ "$IN_CHROOT" = false ]; then
+    ufw default deny incoming 2>/dev/null
+    ufw default allow outgoing 2>/dev/null
+    ufw allow ssh 2>/dev/null
+    ufw --force enable 2>/dev/null
+fi
 
 # Journal cap
 mkdir -p /etc/systemd/journald.conf.d
