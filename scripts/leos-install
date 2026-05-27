@@ -33,7 +33,7 @@ ping -c1 -W2 archlinux.org &>/dev/null || die "No internet. Connect first: iwctl
 info "Detecting disks..."
 echo ""
 
-mapfile -t DISKS < <(lsblk -dnpo NAME,SIZE,MODEL,TYPE | awk '$4=="disk"{print $1}')
+mapfile -t DISKS < <(lsblk -dnpo NAME -I 8,259,254 | grep -v "^$")
 [ ${#DISKS[@]} -gt 0 ] || die "No disks found"
 
 echo -e "${BOLD}Available disks:${NC}"
